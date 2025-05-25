@@ -1,9 +1,11 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Play, Pause, RotateCcw, CheckCircle } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
+import { VideoPlayerControls } from './VideoPlayerControls';
+import { VideoPlayerProgress } from './VideoPlayerProgress';
+import { VideoPlayerStatus } from './VideoPlayerStatus';
+import { VideoPlayerEmbed } from './VideoPlayerEmbed';
 
 interface Video {
   id: string;
@@ -28,8 +30,6 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
   const [currentTime, setCurrentTime] = useState(video.progress?.watched_seconds || 0);
   const [hasWatched80Percent, setHasWatched80Percent] = useState(false);
   const progressIntervalRef = useRef<NodeJS.Timeout>();
-
-  const embedUrl = `https://www.youtube.com/embed/${video.youtube_video_id}?enablejsapi=1&rel=0`;
 
   useEffect(() => {
     // Initialize with saved progress
@@ -83,14 +83,7 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
     onProgressUpdate(video.id, 0);
   };
 
-  const progress = video.duration_seconds > 0 ? (currentTime / video.duration_seconds) * 100 : 0;
   const timeRemaining = Math.max(0, video.duration_seconds - currentTime);
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   return (
     <div className="space-y-6">
@@ -107,81 +100,30 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="relative">
-            <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden">
-              <iframe
-                src={embedUrl}
-                className="w-full h-full"
-                allowFullScreen
-                title={video.title}
-              />
-            </div>
-          </div>
+          <VideoPlayerEmbed 
+            videoId={video.youtube_video_id} 
+            title={video.title} 
+          />
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Button onClick={togglePlay} size="sm">
-                  {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                </Button>
-                <Button onClick={restart} variant="outline" size="sm">
-                  <RotateCcw className="w-4 h-4" />
-                </Button>
-              </div>
-              <div className="text-sm text-gray-600">
-                {formatTime(currentTime)} / {formatTime(video.duration_seconds)}
-              </div>
-            </div>
+            <VideoPlayerControls
+              isPlaying={isPlaying}
+              onTogglePlay={togglePlay}
+              onRestart={restart}
+              currentTime={currentTime}
+              duration={video.duration_seconds}
+            />
 
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>التقدم</span>
-                <span>{Math.round(progress)}%</span>
-              </div>
-              <Progress value={progress} className="h-2" />
-            </div>
+            <VideoPlayerProgress
+              currentTime={currentTime}
+              duration={video.duration_seconds}
+            />
 
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">حالة المشاهدة:</span>
-                  <span className={`text-sm ${video.progress?.completed ? 'text-green-600' : 'text-blue-600'}`}>
-                    {video.progress?.completed ? 'مكتمل' : hasWatched80Percent ? 'جاري المشاهدة' : 'لم يكتمل بعد'}
-                  </span>
-                </div>
-                
-                {!video.progress?.completed && (
-                  <div className="text-sm text-gray-600">
-                    {hasWatched80Percent ? (
-                      <span className="text-green-600">
-                        ✓ تم مشاهدة 80% من الفيديو - تابع للحصول على الشهادة
-                      </span>
-                    ) : (
-                      <span>
-                        يجب مشاهدة 80% على الأقل من الفيديو للحصول على الشهادة
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {timeRemaining > 0 && !video.progress?.completed && (
-                  <div className="text-sm text-gray-600">
-                    الوقت المتبقي: {formatTime(timeRemaining)}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {video.progress?.completed && (
-              <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
-                <div className="flex items-center">
-                  <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
-                  <span className="text-green-800 font-medium">
-                    تهانينا! لقد أكملت مشاهدة هذا الفيديو بنجاح
-                  </span>
-                </div>
-              </div>
-            )}
+            <VideoPlayerStatus
+              isCompleted={video.progress?.completed || false}
+              hasWatched80Percent={hasWatched80Percent}
+              timeRemaining={timeRemaining}
+            />
           </div>
         </CardContent>
       </Card>
