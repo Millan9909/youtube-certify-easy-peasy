@@ -1,190 +1,131 @@
 
+import { useAuth } from "@/hooks/useAuth";
+import { useCourses } from "@/hooks/useCourses";
+import { useYoutube } from "@/hooks/useYoutube";
 import { useState } from "react";
+import { Navigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { CertificateGenerator } from "@/components/CertificateGenerator";
 import { AddVideoForm } from "@/components/AddVideoForm";
 import { PlaylistManager } from "@/components/PlaylistManager";
-import { Trophy, Play, Award, Youtube, Plus, List } from "lucide-react";
-
-interface Video {
-  id: string;
-  title: string;
-  url: string;
-  duration: number;
-  completed: boolean;
-  progress: number;
-}
-
-interface Course {
-  id: string;
-  title: string;
-  description: string;
-  videos: Video[];
-  totalVideos: number;
-  completedVideos: number;
-}
+import { Trophy, Play, Award, Youtube, Plus, List, LogOut } from "lucide-react";
 
 const Index = () => {
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
+  const { user, loading: authLoading, signOut } = useAuth();
+  const { courses, loading: coursesLoading, createCourse, addVideoToCourse, updateProgress } = useCourses();
+  const { extractVideoId, getVideoInfo } = useYoutube();
+  const [selectedVideo, setSelectedVideo] = useState<any>(null);
   const [showCertificate, setShowCertificate] = useState(false);
-  const [completedCourse, setCompletedCourse] = useState<Course | null>(null);
+  const [completedCourse, setCompletedCourse] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'courses' | 'add-video' | 'add-playlist'>('courses');
-  const [userName, setUserName] = useState('');
 
-  const extractVideoId = (url: string): string | null => {
-    const patterns = [
-      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-      /youtube\.com\/watch\?.*v=([^&\n?#]+)/
-    ];
-    
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match) return match[1];
-    }
-    return null;
-  };
+  // Redirect to auth if not logged in
+  if (authLoading) {
+    return <div className="min-h-screen flex items-center justify-center">جاري التحميل...</div>;
+  }
 
-  const addVideo = (title: string, url: string, courseTitle?: string) => {
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  const addVideo = async (title: string, url: string, courseTitle?: string) => {
     const videoId = extractVideoId(url);
     if (!videoId) {
       alert('رابط يوتيوب غير صحيح');
       return;
     }
 
-    const newVideo: Video = {
-      id: videoId,
-      title,
-      url,
-      duration: 0,
-      completed: false,
-      progress: 0
-    };
+    const videoInfo = await getVideoInfo(videoId);
+    if (!videoInfo) {
+      alert('فشل في الحصول على معلومات الفيديو');
+      return;
+    }
+
+    let courseId: string;
 
     if (courseTitle) {
-      // إضافة لدورة موجودة أو إنشاء دورة جديدة
-      setCourses(prev => {
-        const existingCourseIndex = prev.findIndex(c => c.title === courseTitle);
-        if (existingCourseIndex >= 0) {
-          const updatedCourses = [...prev];
-          updatedCourses[existingCourseIndex].videos.push(newVideo);
-          updatedCourses[existingCourseIndex].totalVideos++;
-          return updatedCourses;
-        } else {
-          const newCourse: Course = {
-            id: Date.now().toString(),
-            title: courseTitle,
-            description: `دورة تحتوي على فيديوهات تعليمية`,
-            videos: [newVideo],
-            totalVideos: 1,
-            completedVideos: 0
-          };
-          return [...prev, newCourse];
+      // Find existing course or create new one
+      const existingCourse = courses.find(c => c.title === courseTitle);
+      if (existingCourse) {
+        courseId = existingCourse.id;
+      } else {
+        const newCourse = await createCourse(courseTitle, 'دورة تحتوي على فيديوهات تعليمية');
+        if (!newCourse) {
+          alert('فشل في إنشاء الدورة');
+          return;
         }
-      });
+        courseId = newCourse.id;
+      }
     } else {
-      // إنشاء دورة منفردة
-      const newCourse: Course = {
-        id: Date.now().toString(),
-        title,
-        description: 'فيديو تعليمي منفرد',
-        videos: [newVideo],
-        totalVideos: 1,
-        completedVideos: 0
-      };
-      setCourses(prev => [...prev, newCourse]);
+      // Create single video course
+      const newCourse = await createCourse(title, 'فيديو تعليمي منفرد');
+      if (!newCourse) {
+        alert('فشل في إنشاء الدورة');
+        return;
+      }
+      courseId = newCourse.id;
+    }
+
+    await addVideoToCourse(courseId, title, url, videoId, videoInfo.duration);
+  };
+
+  const addPlaylist = async (playlistUrl: string, courseTitle: string) => {
+    // Create course for playlist
+    const course = await createCourse(courseTitle, 'دورة تم إنشاؤها من قائمة تشغيل يوتيوب');
+    if (!course) return;
+
+    // Mock playlist videos (in real app, use YouTube API)
+    const mockVideos = [
+      { title: 'الدرس الأول', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+      { title: 'الدرس الثاني', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+      { title: 'الدرس الثالث', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+    ];
+
+    for (const video of mockVideos) {
+      const videoId = extractVideoId(video.url);
+      if (videoId) {
+        const videoInfo = await getVideoInfo(videoId);
+        if (videoInfo) {
+          await addVideoToCourse(course.id, video.title, video.url, videoId, videoInfo.duration);
+        }
+      }
     }
   };
 
-  const addPlaylist = (playlistUrl: string, courseTitle: string) => {
-    // محاكاة إضافة قائمة تشغيل
-    const mockVideos: Video[] = [
-      {
-        id: 'vid1',
-        title: 'الدرس الأول',
-        url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-        duration: 0,
-        completed: false,
-        progress: 0
-      },
-      {
-        id: 'vid2',
-        title: 'الدرس الثاني',
-        url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-        duration: 0,
-        completed: false,
-        progress: 0
-      },
-      {
-        id: 'vid3',
-        title: 'الدرس الثالث',
-        url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-        duration: 0,
-        completed: false,
-        progress: 0
+  const onVideoComplete = async (videoId: string) => {
+    await updateProgress(videoId, 0, true);
+    
+    // Check if course is completed
+    const course = courses.find(c => c.videos.some(v => v.id === videoId));
+    if (course) {
+      const completedCount = course.videos.filter(v => v.progress?.completed || v.id === videoId).length;
+      if (completedCount === course.totalVideos) {
+        setCompletedCourse(course);
+        setShowCertificate(true);
       }
-    ];
-
-    const newCourse: Course = {
-      id: Date.now().toString(),
-      title: courseTitle,
-      description: 'دورة تم إنشاؤها من قائمة تشغيل يوتيوب',
-      videos: mockVideos,
-      totalVideos: mockVideos.length,
-      completedVideos: 0
-    };
-
-    setCourses(prev => [...prev, newCourse]);
+    }
   };
 
-  const onVideoComplete = (videoId: string) => {
-    setCourses(prev => {
-      const updatedCourses = prev.map(course => {
-        const videoIndex = course.videos.findIndex(v => v.id === videoId);
-        if (videoIndex >= 0 && !course.videos[videoIndex].completed) {
-          const updatedVideos = [...course.videos];
-          updatedVideos[videoIndex] = { ...updatedVideos[videoIndex], completed: true, progress: 100 };
-          
-          const completedCount = updatedVideos.filter(v => v.completed).length;
-          const updatedCourse = {
-            ...course,
-            videos: updatedVideos,
-            completedVideos: completedCount
-          };
-
-          // فحص إكمال الدورة
-          if (completedCount === course.totalVideos) {
-            setCompletedCourse(updatedCourse);
-            setShowCertificate(true);
-          }
-
-          return updatedCourse;
-        }
-        return course;
-      });
-      return updatedCourses;
-    });
+  const updateVideoProgress = async (videoId: string, progress: number) => {
+    const video = courses.flatMap(c => c.videos).find(v => v.id === videoId);
+    if (video) {
+      const watchedSeconds = Math.round((progress / 100) * video.duration_seconds);
+      const completed = progress >= 80; // Complete at 80%
+      await updateProgress(videoId, watchedSeconds, completed);
+    }
   };
 
-  const updateVideoProgress = (videoId: string, progress: number) => {
-    setCourses(prev => 
-      prev.map(course => ({
-        ...course,
-        videos: course.videos.map(video => 
-          video.id === videoId ? { ...video, progress } : video
-        )
-      }))
-    );
-  };
-
-  const getCourseProgress = (course: Course) => {
-    const totalProgress = course.videos.reduce((sum, video) => sum + video.progress, 0);
-    return course.totalVideos > 0 ? totalProgress / course.totalVideos : 0;
+  const getCourseProgress = (course: any) => {
+    if (course.totalVideos === 0) return 0;
+    const totalProgress = course.videos.reduce((sum: number, video: any) => {
+      const progress = video.progress ? (video.progress.watched_seconds / video.duration_seconds) * 100 : 0;
+      return sum + Math.min(progress, 100);
+    }, 0);
+    return totalProgress / course.totalVideos;
   };
 
   return (
@@ -201,21 +142,14 @@ const Index = () => {
                 منصة الشهادات التعليمية
               </h1>
             </div>
-            {!userName ? (
-              <div className="flex items-center space-x-2">
-                <Input
-                  placeholder="أدخل اسمك"
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  className="w-40"
-                />
-              </div>
-            ) : (
-              <div className="flex items-center space-x-2">
-                <span className="text-gray-600">مرحباً،</span>
-                <span className="font-semibold text-blue-600">{userName}</span>
-              </div>
-            )}
+            <div className="flex items-center space-x-4">
+              <span className="text-gray-600">مرحباً،</span>
+              <span className="font-semibold text-blue-600">{user.email}</span>
+              <Button variant="outline" onClick={signOut}>
+                <LogOut className="w-4 h-4 mr-2" />
+                تسجيل الخروج
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -278,7 +212,9 @@ const Index = () => {
               </div>
             ) : (
               <>
-                {courses.length === 0 ? (
+                {coursesLoading ? (
+                  <div className="text-center py-12">جاري تحميل الدورات...</div>
+                ) : courses.length === 0 ? (
                   <Card className="text-center py-12">
                     <CardContent>
                       <Youtube className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -316,7 +252,7 @@ const Index = () => {
                               <CardTitle className="text-lg">{course.title}</CardTitle>
                               <CardDescription>{course.description}</CardDescription>
                             </div>
-                            {course.completedVideos === course.totalVideos && (
+                            {course.completedVideos === course.totalVideos && course.totalVideos > 0 && (
                               <Badge className="bg-green-100 text-green-800">
                                 مكتملة
                               </Badge>
@@ -337,7 +273,7 @@ const Index = () => {
                           </div>
 
                           <div className="space-y-2">
-                            {course.videos.map((video) => (
+                            {course.videos.map((video: any) => (
                               <div key={video.id} className="flex items-center justify-between">
                                 <Button
                                   variant="ghost"
@@ -348,7 +284,7 @@ const Index = () => {
                                   <Play className="w-4 h-4 mr-2" />
                                   <span className="truncate">{video.title}</span>
                                 </Button>
-                                {video.completed && (
+                                {video.progress?.completed && (
                                   <Badge variant="secondary" className="text-green-600">
                                     ✓
                                   </Badge>
@@ -357,7 +293,7 @@ const Index = () => {
                             ))}
                           </div>
 
-                          {course.completedVideos === course.totalVideos && (
+                          {course.completedVideos === course.totalVideos && course.totalVideos > 0 && (
                             <Button
                               onClick={() => {
                                 setCompletedCourse(course);
@@ -392,7 +328,7 @@ const Index = () => {
       {showCertificate && completedCourse && (
         <CertificateGenerator
           course={completedCourse}
-          userName={userName || 'المتدرب'}
+          userName={user.email || 'المتدرب'}
           onClose={() => setShowCertificate(false)}
         />
       )}

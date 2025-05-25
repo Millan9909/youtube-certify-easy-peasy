@@ -8,10 +8,13 @@ import { Play, Pause, RotateCcw, CheckCircle } from 'lucide-react';
 interface Video {
   id: string;
   title: string;
-  url: string;
-  duration: number;
-  completed: boolean;
-  progress: number;
+  youtube_url: string;
+  youtube_video_id: string;
+  duration_seconds: number;
+  progress?: {
+    watched_seconds: number;
+    completed: boolean;
+  };
 }
 
 interface VideoPlayerProps {
@@ -22,50 +25,38 @@ interface VideoPlayerProps {
 
 export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(video.progress?.watched_seconds || 0);
   const [hasWatched80Percent, setHasWatched80Percent] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout>();
 
-  const extractVideoId = (url: string): string | null => {
-    const patterns = [
-      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-      /youtube\.com\/watch\?.*v=([^&\n?#]+)/
-    ];
-    
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match) return match[1];
-    }
-    return null;
-  };
-
-  const videoId = extractVideoId(video.url);
-  const embedUrl = videoId ? `https://www.youtube.com/embed/${videoId}?enablejsapi=1&rel=0` : '';
+  const embedUrl = `https://www.youtube.com/embed/${video.youtube_video_id}?enablejsapi=1&rel=0`;
 
   useEffect(() => {
-    // محاكاة تتبع التقدم
+    // Initialize with saved progress
+    setCurrentTime(video.progress?.watched_seconds || 0);
+    const progress = video.duration_seconds > 0 ? ((video.progress?.watched_seconds || 0) / video.duration_seconds) * 100 : 0;
+    setHasWatched80Percent(progress >= 80);
+  }, [video.id, video.progress, video.duration_seconds]);
+
+  useEffect(() => {
     if (isPlaying) {
       progressIntervalRef.current = setInterval(() => {
         setCurrentTime(prev => {
           const newTime = prev + 1;
-          const progress = duration > 0 ? (newTime / duration) * 100 : 0;
+          const progress = video.duration_seconds > 0 ? (newTime / video.duration_seconds) * 100 : 0;
           
           onProgressUpdate(video.id, progress);
           
-          // فحص إذا وصل المستخدم لـ 80% من الفيديو
           if (progress >= 80 && !hasWatched80Percent) {
             setHasWatched80Percent(true);
           }
           
-          // إكمال الفيديو عند الوصول للنهاية
-          if (progress >= 95) {
+          if (progress >= 95 && !video.progress?.completed) {
             onComplete(video.id);
             setIsPlaying(false);
           }
           
-          return newTime;
+          return Math.min(newTime, video.duration_seconds);
         });
       }, 1000);
     } else {
@@ -79,12 +70,7 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
         clearInterval(progressIntervalRef.current);
       }
     };
-  }, [isPlaying, duration, video.id, onComplete, onProgressUpdate, hasWatched80Percent]);
-
-  useEffect(() => {
-    // تعيين مدة وهمية للفيديو (في التطبيق الحقيقي ستأتي من YouTube API)
-    setDuration(300); // 5 دقائق كمثال
-  }, [video.id]);
+  }, [isPlaying, video.duration_seconds, video.id, onComplete, onProgressUpdate, hasWatched80Percent, video.progress?.completed]);
 
   const togglePlay = () => {
     setIsPlaying(!isPlaying);
@@ -97,8 +83,8 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
     onProgressUpdate(video.id, 0);
   };
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-  const timeRemaining = Math.max(0, duration - currentTime);
+  const progress = video.duration_seconds > 0 ? (currentTime / video.duration_seconds) * 100 : 0;
+  const timeRemaining = Math.max(0, video.duration_seconds - currentTime);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -112,7 +98,7 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>{video.title}</span>
-            {video.completed && (
+            {video.progress?.completed && (
               <div className="flex items-center text-green-600">
                 <CheckCircle className="w-5 h-5 mr-2" />
                 <span className="text-sm">مكتمل</span>
@@ -121,26 +107,17 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* مشغل الفيديو */}
           <div className="relative">
             <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden">
-              {embedUrl ? (
-                <iframe
-                  ref={iframeRef}
-                  src={embedUrl}
-                  className="w-full h-full"
-                  allowFullScreen
-                  title={video.title}
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-white">
-                  <p>رابط الفيديو غير صحيح</p>
-                </div>
-              )}
+              <iframe
+                src={embedUrl}
+                className="w-full h-full"
+                allowFullScreen
+                title={video.title}
+              />
             </div>
           </div>
 
-          {/* أدوات التحكم */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
@@ -152,11 +129,10 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
                 </Button>
               </div>
               <div className="text-sm text-gray-600">
-                {formatTime(currentTime)} / {formatTime(duration)}
+                {formatTime(currentTime)} / {formatTime(video.duration_seconds)}
               </div>
             </div>
 
-            {/* شريط التقدم */}
             <div className="space-y-2">
               <div className="flex justify-between text-sm text-gray-600">
                 <span>التقدم</span>
@@ -165,17 +141,16 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
               <Progress value={progress} className="h-2" />
             </div>
 
-            {/* معلومات التقدم */}
             <div className="bg-blue-50 p-4 rounded-lg">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">حالة المشاهدة:</span>
-                  <span className={`text-sm ${video.completed ? 'text-green-600' : 'text-blue-600'}`}>
-                    {video.completed ? 'مكتمل' : hasWatched80Percent ? 'جاري المشاهدة' : 'لم يكتمل بعد'}
+                  <span className={`text-sm ${video.progress?.completed ? 'text-green-600' : 'text-blue-600'}`}>
+                    {video.progress?.completed ? 'مكتمل' : hasWatched80Percent ? 'جاري المشاهدة' : 'لم يكتمل بعد'}
                   </span>
                 </div>
                 
-                {!video.completed && (
+                {!video.progress?.completed && (
                   <div className="text-sm text-gray-600">
                     {hasWatched80Percent ? (
                       <span className="text-green-600">
@@ -189,7 +164,7 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
                   </div>
                 )}
 
-                {timeRemaining > 0 && !video.completed && (
+                {timeRemaining > 0 && !video.progress?.completed && (
                   <div className="text-sm text-gray-600">
                     الوقت المتبقي: {formatTime(timeRemaining)}
                   </div>
@@ -197,8 +172,7 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
               </div>
             </div>
 
-            {/* رسالة الإكمال */}
-            {video.completed && (
+            {video.progress?.completed && (
               <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
                 <div className="flex items-center">
                   <CheckCircle className="w-5 h-5 text-green-600 mr-2" />

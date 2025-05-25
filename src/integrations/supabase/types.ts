@@ -9,7 +9,171 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      certificates: {
+        Row: {
+          certificate_data: Json | null
+          course_id: string
+          id: string
+          issued_at: string | null
+          user_id: string
+        }
+        Insert: {
+          certificate_data?: Json | null
+          course_id: string
+          id?: string
+          issued_at?: string | null
+          user_id: string
+        }
+        Update: {
+          certificate_data?: Json | null
+          course_id?: string
+          id?: string
+          issued_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "certificates_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      courses: {
+        Row: {
+          created_at: string | null
+          created_by: string
+          description: string | null
+          id: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by: string
+          description?: string | null
+          id?: string
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string
+          description?: string | null
+          id?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          full_name: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          full_name?: string | null
+          id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      user_progress: {
+        Row: {
+          completed: boolean | null
+          created_at: string | null
+          id: string
+          last_watched_at: string | null
+          updated_at: string | null
+          user_id: string
+          video_id: string
+          watched_seconds: number | null
+        }
+        Insert: {
+          completed?: boolean | null
+          created_at?: string | null
+          id?: string
+          last_watched_at?: string | null
+          updated_at?: string | null
+          user_id: string
+          video_id: string
+          watched_seconds?: number | null
+        }
+        Update: {
+          completed?: boolean | null
+          created_at?: string | null
+          id?: string
+          last_watched_at?: string | null
+          updated_at?: string | null
+          user_id?: string
+          video_id?: string
+          watched_seconds?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_progress_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      videos: {
+        Row: {
+          course_id: string
+          created_at: string | null
+          duration_seconds: number | null
+          id: string
+          order_index: number | null
+          title: string
+          updated_at: string | null
+          youtube_url: string
+          youtube_video_id: string
+        }
+        Insert: {
+          course_id: string
+          created_at?: string | null
+          duration_seconds?: number | null
+          id?: string
+          order_index?: number | null
+          title: string
+          updated_at?: string | null
+          youtube_url: string
+          youtube_video_id: string
+        }
+        Update: {
+          course_id?: string
+          created_at?: string | null
+          duration_seconds?: number | null
+          id?: string
+          order_index?: number | null
+          title?: string
+          updated_at?: string | null
+          youtube_url?: string
+          youtube_video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "videos_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
