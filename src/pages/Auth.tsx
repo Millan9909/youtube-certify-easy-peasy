@@ -21,11 +21,6 @@ const Auth = () => {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Redirect if already authenticated
-  if (!loading && user) {
-    return <Navigate to="/" replace />;
-  }
-
   // Handle password recovery
   useEffect(() => {
     const type = searchParams.get('type');
@@ -61,6 +56,11 @@ const Auth = () => {
       setIsSubmitting(false);
     }
   };
+
+  // Now handle conditional rendering after all hooks are called
+  if (!loading && user) {
+    return <Navigate to="/" replace />;
+  }
 
   if (loading) {
     return (
