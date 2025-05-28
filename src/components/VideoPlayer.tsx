@@ -5,7 +5,6 @@ import { CheckCircle } from 'lucide-react';
 import { VideoPlayerControls } from './VideoPlayerControls';
 import { VideoPlayerProgress } from './VideoPlayerProgress';
 import { VideoPlayerStatus } from './VideoPlayerStatus';
-import { VideoPlayerEmbed } from './VideoPlayerEmbed';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -34,6 +33,7 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
   const [hasWatched80Percent, setHasWatched80Percent] = useState(false);
   const [actualDuration, setActualDuration] = useState(video.duration_seconds);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const progressIntervalRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
     // Initialize with saved progress
@@ -41,6 +41,31 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
     const progress = actualDuration > 0 ? ((video.progress?.watched_seconds || 0) / actualDuration) * 100 : 0;
     setHasWatched80Percent(progress >= 80);
     
+    // Start progress tracking when component mounts
+    const startProgressTracking = () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+      
+      progressIntervalRef.current = setInterval(() => {
+        if (iframeRef.current) {
+          // Request current time and duration from YouTube
+          iframeRef.current.contentWindow?.postMessage(
+            '{"event":"command","func":"getCurrentTime","args":""}',
+            'https://www.youtube.com'
+          );
+          iframeRef.current.contentWindow?.postMessage(
+            '{"event":"command","func":"getDuration","args":""}',
+            'https://www.youtube.com'
+          );
+          iframeRef.current.contentWindow?.postMessage(
+            '{"event":"command","func":"getPlayerState","args":""}',
+            'https://www.youtube.com'
+          );
+        }
+      }, 1000);
+    };
+
     // Listen to YouTube player events
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== 'https://www.youtube.com') return;
@@ -48,15 +73,10 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
       try {
         const data = JSON.parse(event.data);
         
-        if (data.event === 'video-data') {
-          // Update actual duration when received from YouTube
-          if (data.info.duration && data.info.duration !== actualDuration) {
-            setActualDuration(data.info.duration);
-            console.log('Updated video duration to:', data.info.duration);
-          }
-          
-          // Update current time automatically
-          if (data.info.currentTime !== undefined) {
+        // Handle different response types from YouTube API
+        if (data.event === 'infoDelivery') {
+          // Get current time
+          if (data.info && typeof data.info.currentTime === 'number') {
             const newTime = Math.floor(data.info.currentTime);
             setCurrentTime(newTime);
             
@@ -88,8 +108,17 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
             }
           }
           
-          // Update playing state
-          if (data.info.playerState !== undefined) {
+          // Get duration
+          if (data.info && typeof data.info.duration === 'number') {
+            const newDuration = Math.floor(data.info.duration);
+            if (newDuration !== actualDuration && newDuration > 0) {
+              setActualDuration(newDuration);
+              console.log('Updated video duration to:', newDuration);
+            }
+          }
+          
+          // Get player state
+          if (data.info && typeof data.info.playerState === 'number') {
             setIsPlaying(data.info.playerState === 1); // 1 = playing
           }
         }
@@ -100,8 +129,17 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
 
     window.addEventListener('message', handleMessage);
     
+    // Start tracking after a short delay to ensure iframe is loaded
+    const initTimeout = setTimeout(() => {
+      startProgressTracking();
+    }, 2000);
+    
     return () => {
       window.removeEventListener('message', handleMessage);
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+      clearTimeout(initTimeout);
     };
   }, [video.id, video.progress, actualDuration, onComplete, onProgressUpdate, hasWatched80Percent, user]);
 
