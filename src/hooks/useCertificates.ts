@@ -41,7 +41,19 @@ export const useCertificates = () => {
         .order('issued_at', { ascending: false });
 
       if (error) throw error;
-      setCertificates(data || []);
+      
+      // Transform the data to match our Certificate interface
+      const transformedData = data?.map(cert => ({
+        id: cert.id,
+        course_id: cert.course_id,
+        issued_at: cert.issued_at,
+        course: {
+          title: cert.courses?.title || '',
+          description: cert.courses?.description || ''
+        }
+      })) || [];
+      
+      setCertificates(transformedData);
     } catch (error) {
       console.error('Error fetching certificates:', error);
     } finally {
