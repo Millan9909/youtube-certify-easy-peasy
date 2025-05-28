@@ -32,64 +32,78 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(video.progress?.watched_seconds || 0);
   const [hasWatched80Percent, setHasWatched80Percent] = useState(false);
+  const [actualDuration, setActualDuration] = useState(video.duration_seconds);
   const progressIntervalRef = useRef<NodeJS.Timeout>();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     // Initialize with saved progress
     setCurrentTime(video.progress?.watched_seconds || 0);
-    const progress = video.duration_seconds > 0 ? ((video.progress?.watched_seconds || 0) / video.duration_seconds) * 100 : 0;
+    const progress = actualDuration > 0 ? ((video.progress?.watched_seconds || 0) / actualDuration) * 100 : 0;
     setHasWatched80Percent(progress >= 80);
-  }, [video.id, video.progress, video.duration_seconds]);
-
-  useEffect(() => {
-    if (isPlaying) {
-      progressIntervalRef.current = setInterval(() => {
-        setCurrentTime(prev => {
-          const newTime = prev + 1;
-          const progress = video.duration_seconds > 0 ? (newTime / video.duration_seconds) * 100 : 0;
-          
-          // Update progress in database every 10 seconds
-          if (newTime % 10 === 0 && user) {
-            updateVideoProgress(newTime, progress >= 100);
+    
+    // Listen to YouTube player events
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== 'https://www.youtube.com') return;
+      
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.event === 'video-data') {
+          if (data.info.duration && data.info.duration !== actualDuration) {
+            setActualDuration(data.info.duration);
           }
           
-          onProgressUpdate(video.id, progress);
-          
-          if (progress >= 80 && !hasWatched80Percent) {
-            setHasWatched80Percent(true);
-          }
-          
-          // Video must be watched 100% to complete
-          if (progress >= 100 && !video.progress?.completed) {
-            onComplete(video.id);
-            setIsPlaying(false);
+          if (data.info.currentTime !== undefined) {
+            const newTime = Math.floor(data.info.currentTime);
+            setCurrentTime(newTime);
             
-            // Add notification for completion
-            if (user) {
-              supabase.from('notifications').insert({
-                user_id: user.id,
-                title: 'فيديو مكتمل',
-                message: `تم إكمال فيديو "${video.title}" بنجاح`,
-                type: 'success'
-              });
+            const progress = actualDuration > 0 ? (newTime / actualDuration) * 100 : 0;
+            onProgressUpdate(video.id, progress);
+            
+            if (progress >= 80 && !hasWatched80Percent) {
+              setHasWatched80Percent(true);
+            }
+            
+            // Auto-save progress every 10 seconds
+            if (newTime % 10 === 0 && user) {
+              updateVideoProgress(newTime, progress >= 100);
+            }
+            
+            // Complete video when 100% watched
+            if (progress >= 100 && !video.progress?.completed) {
+              onComplete(video.id);
+              setIsPlaying(false);
+              
+              if (user) {
+                supabase.from('notifications').insert({
+                  user_id: user.id,
+                  title: 'فيديو مكتمل',
+                  message: `تم إكمال فيديو "${video.title}" بنجاح`,
+                  type: 'success'
+                });
+              }
             }
           }
           
-          return Math.min(newTime, video.duration_seconds);
-        });
-      }, 1000);
-    } else {
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
+          if (data.info.playerState !== undefined) {
+            setIsPlaying(data.info.playerState === 1); // 1 = playing
+          }
+        }
+      } catch (error) {
+        // Ignore parsing errors
       }
-    }
+    };
 
+    window.addEventListener('message', handleMessage);
+    
     return () => {
+      window.removeEventListener('message', handleMessage);
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
       }
     };
-  }, [isPlaying, video.duration_seconds, video.id, onComplete, onProgressUpdate, hasWatched80Percent, video.progress?.completed, user]);
+  }, [video.id, video.progress, actualDuration, onComplete, onProgressUpdate, hasWatched80Percent, user]);
 
   const updateVideoProgress = async (watchedSeconds: number, completed: boolean) => {
     if (!user) return;
@@ -111,7 +125,7 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
         await supabase.rpc('update_watch_stats', {
           _user_id: user.id,
           _video_id: video.id,
-          _minutes_watched: 1 // Add 1 minute
+          _minutes_watched: 1
         });
       }
     } catch (error) {
@@ -120,10 +134,27 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
   };
 
   const togglePlay = () => {
-    setIsPlaying(!isPlaying);
+    if (iframeRef.current) {
+      const command = isPlaying ? 'pauseVideo' : 'playVideo';
+      iframeRef.current.contentWindow?.postMessage(
+        `{"event":"command","func":"${command}","args":""}`,
+        'https://www.youtube.com'
+      );
+    }
   };
 
   const restart = () => {
+    if (iframeRef.current) {
+      iframeRef.current.contentWindow?.postMessage(
+        '{"event":"command","func":"seekTo","args":[0, true]}',
+        'https://www.youtube.com'
+      );
+      iframeRef.current.contentWindow?.postMessage(
+        '{"event":"command","func":"pauseVideo","args":""}',
+        'https://www.youtube.com'
+      );
+    }
+    
     setCurrentTime(0);
     setIsPlaying(false);
     setHasWatched80Percent(false);
@@ -134,7 +165,7 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
     }
   };
 
-  const timeRemaining = Math.max(0, video.duration_seconds - currentTime);
+  const timeRemaining = Math.max(0, actualDuration - currentTime);
 
   return (
     <div className="space-y-6">
@@ -151,10 +182,16 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <VideoPlayerEmbed 
-            videoId={video.youtube_video_id} 
-            title={video.title} 
-          />
+          <div className="relative">
+            <iframe
+              ref={iframeRef}
+              src={`https://www.youtube.com/embed/${video.youtube_video_id}?enablejsapi=1&origin=${window.location.origin}`}
+              title={video.title}
+              className="w-full aspect-video rounded-lg"
+              allowFullScreen
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            />
+          </div>
 
           <div className="space-y-4">
             <VideoPlayerControls
@@ -162,12 +199,12 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
               onTogglePlay={togglePlay}
               onRestart={restart}
               currentTime={currentTime}
-              duration={video.duration_seconds}
+              duration={actualDuration}
             />
 
             <VideoPlayerProgress
               currentTime={currentTime}
-              duration={video.duration_seconds}
+              duration={actualDuration}
             />
 
             <VideoPlayerStatus
