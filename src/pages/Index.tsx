@@ -1,7 +1,7 @@
-
 import { useAuth } from "@/hooks/useAuth";
 import { useCourses } from "@/hooks/useCourses";
 import { useYoutube } from "@/hooks/useYoutube";
+import { useAdmin } from "@/hooks/useAdmin";
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,16 +12,21 @@ import { VideoPlayer } from "@/components/VideoPlayer";
 import { CertificateGenerator } from "@/components/CertificateGenerator";
 import { AddVideoForm } from "@/components/AddVideoForm";
 import { PlaylistManager } from "@/components/PlaylistManager";
-import { Trophy, Play, Award, Youtube, Plus, List, LogOut } from "lucide-react";
+import { AdminDashboard } from "@/components/AdminDashboard";
+import { CertificatesPage } from "@/components/CertificatesPage";
+import { ProfileSettings } from "@/components/ProfileSettings";
+import { NotificationsDropdown } from "@/components/NotificationsDropdown";
+import { Trophy, Play, Award, Youtube, Plus, List, LogOut, Settings, User, Shield } from "lucide-react";
 
 const Index = () => {
   const { user, loading: authLoading, signOut } = useAuth();
   const { courses, loading: coursesLoading, createCourse, addVideoToCourse, updateProgress } = useCourses();
   const { extractVideoId, getVideoInfo } = useYoutube();
+  const { isAdmin } = useAdmin();
   const [selectedVideo, setSelectedVideo] = useState<any>(null);
   const [showCertificate, setShowCertificate] = useState(false);
   const [completedCourse, setCompletedCourse] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'courses' | 'add-video' | 'add-playlist'>('courses');
+  const [activeTab, setActiveTab] = useState<'courses' | 'add-video' | 'add-playlist' | 'admin' | 'certificates' | 'profile'>('courses');
 
   // Redirect to auth if not logged in
   if (authLoading) {
@@ -48,7 +53,6 @@ const Index = () => {
     let courseId: string;
 
     if (courseTitle) {
-      // Find existing course or create new one
       const existingCourse = courses.find(c => c.title === courseTitle);
       if (existingCourse) {
         courseId = existingCourse.id;
@@ -61,7 +65,6 @@ const Index = () => {
         courseId = newCourse.id;
       }
     } else {
-      // Create single video course
       const newCourse = await createCourse(title, 'فيديو تعليمي منفرد');
       if (!newCourse) {
         alert('فشل في إنشاء الدورة');
@@ -74,11 +77,9 @@ const Index = () => {
   };
 
   const addPlaylist = async (playlistUrl: string, courseTitle: string) => {
-    // Create course for playlist
     const course = await createCourse(courseTitle, 'دورة تم إنشاؤها من قائمة تشغيل يوتيوب');
     if (!course) return;
 
-    // Mock playlist videos (in real app, use YouTube API)
     const mockVideos = [
       { title: 'الدرس الأول', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
       { title: 'الدرس الثاني', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
@@ -99,7 +100,6 @@ const Index = () => {
   const onVideoComplete = async (videoId: string) => {
     await updateProgress(videoId, 0, true);
     
-    // Check if course is completed
     const course = courses.find(c => c.videos.some(v => v.id === videoId));
     if (course) {
       const completedCount = course.videos.filter(v => v.progress?.completed || v.id === videoId).length;
@@ -114,7 +114,7 @@ const Index = () => {
     const video = courses.flatMap(c => c.videos).find(v => v.id === videoId);
     if (video) {
       const watchedSeconds = Math.round((progress / 100) * video.duration_seconds);
-      const completed = progress >= 80; // Complete at 80%
+      const completed = progress >= 100; // Must watch 100% to complete
       await updateProgress(videoId, watchedSeconds, completed);
     }
   };
@@ -143,6 +143,7 @@ const Index = () => {
               </h1>
             </div>
             <div className="flex items-center space-x-4">
+              <NotificationsDropdown />
               <span className="text-gray-600">مرحباً،</span>
               <span className="font-semibold text-blue-600">{user.email}</span>
               <Button variant="outline" onClick={signOut}>
@@ -156,10 +157,10 @@ const Index = () => {
 
       <div className="container mx-auto px-4 py-8">
         {/* Navigation */}
-        <div className="flex space-x-1 mb-8 bg-white p-1 rounded-lg shadow-sm">
+        <div className="flex flex-wrap gap-1 mb-8 bg-white p-1 rounded-lg shadow-sm">
           <button
             onClick={() => setActiveTab('courses')}
-            className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-md transition-colors ${
+            className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-md transition-colors ${
               activeTab === 'courses'
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-600 hover:bg-gray-100'
@@ -169,8 +170,19 @@ const Index = () => {
             <span>الدورات</span>
           </button>
           <button
+            onClick={() => setActiveTab('certificates')}
+            className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-md transition-colors ${
+              activeTab === 'certificates'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <Award className="w-4 h-4" />
+            <span>شهاداتي</span>
+          </button>
+          <button
             onClick={() => setActiveTab('add-video')}
-            className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-md transition-colors ${
+            className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-md transition-colors ${
               activeTab === 'add-video'
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-600 hover:bg-gray-100'
@@ -181,7 +193,7 @@ const Index = () => {
           </button>
           <button
             onClick={() => setActiveTab('add-playlist')}
-            className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-md transition-colors ${
+            className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-md transition-colors ${
               activeTab === 'add-playlist'
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-600 hover:bg-gray-100'
@@ -190,6 +202,30 @@ const Index = () => {
             <List className="w-4 h-4" />
             <span>إضافة قائمة تشغيل</span>
           </button>
+          <button
+            onClick={() => setActiveTab('profile')}
+            className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-md transition-colors ${
+              activeTab === 'profile'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <User className="w-4 h-4" />
+            <span>الملف الشخصي</span>
+          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab('admin')}
+              className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-md transition-colors ${
+                activeTab === 'admin'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Shield className="w-4 h-4" />
+              <span>لوحة التحكم</span>
+            </button>
+          )}
         </div>
 
         {/* Content */}
@@ -315,13 +351,11 @@ const Index = () => {
           </div>
         )}
 
-        {activeTab === 'add-video' && (
-          <AddVideoForm onAddVideo={addVideo} existingCourses={courses} />
-        )}
-
-        {activeTab === 'add-playlist' && (
-          <PlaylistManager onAddPlaylist={addPlaylist} />
-        )}
+        {activeTab === 'certificates' && <CertificatesPage />}
+        {activeTab === 'add-video' && <AddVideoForm onAddVideo={addVideo} existingCourses={courses} />}
+        {activeTab === 'add-playlist' && <PlaylistManager onAddPlaylist={addPlaylist} />}
+        {activeTab === 'profile' && <ProfileSettings />}
+        {activeTab === 'admin' && isAdmin && <AdminDashboard />}
       </div>
 
       {/* Certificate Modal */}

@@ -9,12 +9,49 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      certificate_templates: {
+        Row: {
+          background_image_url: string | null
+          created_at: string | null
+          created_by: string
+          id: string
+          name: string
+          signature_image_url: string | null
+          stamp_image_url: string | null
+          template_data: Json
+          updated_at: string | null
+        }
+        Insert: {
+          background_image_url?: string | null
+          created_at?: string | null
+          created_by: string
+          id?: string
+          name: string
+          signature_image_url?: string | null
+          stamp_image_url?: string | null
+          template_data: Json
+          updated_at?: string | null
+        }
+        Update: {
+          background_image_url?: string | null
+          created_at?: string | null
+          created_by?: string
+          id?: string
+          name?: string
+          signature_image_url?: string | null
+          stamp_image_url?: string | null
+          template_data?: Json
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       certificates: {
         Row: {
           certificate_data: Json | null
           course_id: string
           id: string
           issued_at: string | null
+          template_id: string | null
           user_id: string
         }
         Insert: {
@@ -22,6 +59,7 @@ export type Database = {
           course_id: string
           id?: string
           issued_at?: string | null
+          template_id?: string | null
           user_id: string
         }
         Update: {
@@ -29,11 +67,51 @@ export type Database = {
           course_id?: string
           id?: string
           issued_at?: string | null
+          template_id?: string | null
           user_id?: string
         }
         Relationships: [
           {
             foreignKeyName: "certificates_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificates_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "certificate_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      course_assignments: {
+        Row: {
+          assigned_at: string | null
+          assigned_by: string
+          course_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_by: string
+          course_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_by?: string
+          course_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_assignments_course_id_fkey"
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "courses"
@@ -68,23 +146,56 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          created_at: string | null
+          id: string
+          message: string
+          read: boolean | null
+          title: string
+          type: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          message: string
+          read?: boolean | null
+          title: string
+          type?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          message?: string
+          read?: boolean | null
+          title?: string
+          type?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null
           full_name: string | null
           id: string
+          preferred_certificate_name: string | null
           updated_at: string | null
         }
         Insert: {
           created_at?: string | null
           full_name?: string | null
           id: string
+          preferred_certificate_name?: string | null
           updated_at?: string | null
         }
         Update: {
           created_at?: string | null
           full_name?: string | null
           id?: string
+          preferred_certificate_name?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -123,6 +234,62 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "user_progress_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["user_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      video_watch_stats: {
+        Row: {
+          created_at: string | null
+          id: string
+          minutes_watched: number | null
+          user_id: string
+          video_id: string
+          watch_date: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          minutes_watched?: number | null
+          user_id: string
+          video_id: string
+          watch_date?: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          minutes_watched?: number | null
+          user_id?: string
+          video_id?: string
+          watch_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_watch_stats_video_id_fkey"
             columns: ["video_id"]
             isOneToOne: false
             referencedRelation: "videos"
@@ -179,10 +346,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _user_id: string
+          _role: Database["public"]["Enums"]["user_role"]
+        }
+        Returns: boolean
+      }
+      is_admin: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
+      update_watch_stats: {
+        Args: { _user_id: string; _video_id: string; _minutes_watched: number }
+        Returns: undefined
+      }
     }
     Enums: {
-      [_ in never]: never
+      user_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -297,6 +478,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      user_role: ["admin", "user"],
+    },
   },
 } as const
