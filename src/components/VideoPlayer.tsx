@@ -33,7 +33,6 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
   const [currentTime, setCurrentTime] = useState(video.progress?.watched_seconds || 0);
   const [hasWatched80Percent, setHasWatched80Percent] = useState(false);
   const [actualDuration, setActualDuration] = useState(video.duration_seconds);
-  const progressIntervalRef = useRef<NodeJS.Timeout>();
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
@@ -50,10 +49,13 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
         const data = JSON.parse(event.data);
         
         if (data.event === 'video-data') {
+          // Update actual duration when received from YouTube
           if (data.info.duration && data.info.duration !== actualDuration) {
             setActualDuration(data.info.duration);
+            console.log('Updated video duration to:', data.info.duration);
           }
           
+          // Update current time automatically
           if (data.info.currentTime !== undefined) {
             const newTime = Math.floor(data.info.currentTime);
             setCurrentTime(newTime);
@@ -86,6 +88,7 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
             }
           }
           
+          // Update playing state
           if (data.info.playerState !== undefined) {
             setIsPlaying(data.info.playerState === 1); // 1 = playing
           }
@@ -99,9 +102,6 @@ export const VideoPlayer = ({ video, onComplete, onProgressUpdate }: VideoPlayer
     
     return () => {
       window.removeEventListener('message', handleMessage);
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-      }
     };
   }, [video.id, video.progress, actualDuration, onComplete, onProgressUpdate, hasWatched80Percent, user]);
 
